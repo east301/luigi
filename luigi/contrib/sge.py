@@ -142,7 +142,7 @@ def _parse_qsub_job_id(qsub_out):
     return int(qsub_out.split()[2])
 
 
-def _build_qsub_command(cmd, job_name, outfile, errfile, pe, n_cpu):
+def _build_qsub_command(cmd, job_name, outfile, errfile, pe, n_cpu, resources):
     """Submit shell command to SGE queue via `qsub`"""
     qsub_options = [
         '-o ":{}"'.format(outfile),
@@ -152,6 +152,8 @@ def _build_qsub_command(cmd, job_name, outfile, errfile, pe, n_cpu):
         '-pe {} {}'.format(pe, n_cpu),
         '-N {}'.format(job_name)
     ]
+    if resources:
+        qsub_options.append('-l {}'.format(resources))
 
     return 'echo {cmd} | qsub {qsub_options}'.format(cmd=cmd, qsub_options=' '.join(qsub_options))
 
@@ -171,6 +173,7 @@ class SGEJobTask(luigi.Task):
           are using a different cluster environment, check with your
           sysadmin for the right pe to use. This value is passed as {pe}
           to the qsub command above.
+    - resources: Resources required to run this job.
     - shared_tmp_dir: Shared drive accessible from all nodes in the cluster.
           Task classes and dependencies are pickled to a temporary folder on
           this drive. The default is ``/home``, the NFS share location setup
@@ -190,6 +193,7 @@ class SGEJobTask(luigi.Task):
     n_cpu = luigi.IntParameter(default=2, significant=False)
     shared_tmp_dir = luigi.Parameter(default='/home', significant=False)
     parallel_env = luigi.Parameter(default='orte', significant=False)
+    resources = luigi.Parameter(default=None, significant=False)
     job_name_format = luigi.Parameter(
         significant=False, default=None, description="A string that can be "
         "formatted with class variables to name the job with qsub.")
@@ -303,7 +307,7 @@ class SGEJobTask(luigi.Task):
         self.outfile = os.path.join(self.tmp_dir, 'job.out')
         self.errfile = os.path.join(self.tmp_dir, 'job.err')
         submit_cmd = _build_qsub_command(job_str, self.task_family, self.outfile,
-                                         self.errfile, self.parallel_env, self.n_cpu)
+                                         self.errfile, self.parallel_env, self.n_cpu, self.resources)
         logger.debug('qsub command: \n' + submit_cmd)
 
         # Submit the job and grab job ID
